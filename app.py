@@ -1,7 +1,7 @@
 """ETF tracker dashboard (Streamlit Community Cloud — free hosting)."""
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
@@ -29,67 +29,79 @@ if is_market_open():
     st_autorefresh(interval=REFRESH_SECONDS * 1000, key="refresh")
 
 # ---- Header --------------------------------------------------------------
-left, right = st.columns([3, 1])
-with left:
-    st.title("📈 ETF Portfolio Tracker")
-    status = "🟢 Market open" if is_market_open() else "🔴 Market closed"
-    st.caption(f"{status} · auto-refresh {REFRESH_SECONDS}s · data ~15 min delayed (yfinance)")
-with right:
-    st.metric("Monthly SIP", f"₹{MONTHLY_SIP_BUDGET:,}")
-    st.metric("Dip budget", f"₹{MONTHLY_DIP_BUDGET:,}")
+st.title("📈 ETF Portfolio Tracker")
+open_now = is_market_open()
+status = "🟢 Market open" if open_now else "🔴 Market closed"
+refresh_note = f"auto-refresh {REFRESH_SECONDS}s" if open_now else "auto-refresh paused"
+st.caption(f"{status} · {refresh_note} · prices from Yahoo Finance (~15 min delayed)")
 
 quotes = get_quotes()
 if not quotes:
-    st.error("No market data returned. Check ticker symbols in config.py or try again.")
+    st.error("No market data returned. Try again in a moment, or check ticker symbols in config.py.")
     st.stop()
 
-# ---- Price table ---------------------------------------------------------
-rows = []
-for tk, q in quotes.items():
-    rows.append({
-        "Ticker": tk,
-        "Name": q["name"],
-        "Alloc %": q["alloc"],
-        "Freq": q["freq"],
-        "Price ₹": q["price"],
-        "Open ₹": q["open"],
-        "% vs Open": q["pct_from_open"],
-        "% vs Prev": q["pct_from_prev"],
-    })
-df = pd.DataFrame(rows).sort_values("% vs Open")
+# ---- Build the table -----------------------------------------------------
+rows = [{
+    "Ticker": tk, "Name": q["name"], "Alloc %": q["alloc"], "Freq": q["freq"],
+    "Price ₹": q["price"], "Open ₹": q["open"], "Prev ₹": q["prev_close"],
+    "% vs Open": q["pct_from_open"], "% vs Prev": q["pct_from_prev"],
+} for tk, q in quotes.items()]
+df = pd.DataFrame(rows).sort_values("% vs Open", na_position="last")
 
 dips = df[df["% vs Open"] <= -DIP_THRESHOLD_PCT]
-st.subheader(f"Live prices · {len(dips)} ETF(s) dipping ≥ {DIP_THRESHOLD_PCT}% below open")
+
+# Allocation-weighted day move (vs previous close), skipping missing data.
+wdf = df.dropna(subset=["% vs Prev"])
+day_move = (wdf["Alloc %"] * wdf["% vs Prev"]).sum() / wdf["Alloc %"].sum() if not wdf.empty else 0.0
+
+# ---- Summary metrics -----------------------------------------------------
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Portfolio day move", f"{day_move:+.2f}%", help="Allocation-weighted change vs yesterday's close")
+m2.metric("ETFs dipping", f"{len(dips)}", help=f"≥ {DIP_THRESHOLD_PCT:.0f}% below today's open")
+m3.metric("Monthly SIP", f"₹{MONTHLY_SIP_BUDGET:,}")
+m4.metric("Dip budget", f"₹{MONTHLY_DIP_BUDGET:,}")
+
+st.divider()
+
+# ---- Tabs (declutter) ----------------------------------------------------
+tab_prices, tab_chart, tab_alloc, tab_help = st.tabs(
+    ["📊 Prices", "📈 Chart", "🥧 Allocation", "ℹ️ How it works"]
+)
 
 
 def color_pct(v):
+    """Light-theme friendly red/green for % columns."""
+    if pd.isna(v):
+        return ""
     if v <= -DIP_THRESHOLD_PCT:
-        return "background-color:#7f1d1d;color:white"
+        return "background-color:#fee2e2;color:#b91c1c;font-weight:600"
     if v < 0:
-        return "color:#f87171"
+        return "color:#dc2626"
     if v > 0:
-        return "color:#4ade80"
+        return "color:#16a34a"
     return ""
 
 
-styled = (
-    df.style
-    .format({"Price ₹": "{:.2f}", "Open ₹": "{:.2f}",
-             "% vs Open": "{:+.2f}", "% vs Prev": "{:+.2f}", "Alloc %": "{:.0f}"},
-            na_rep="n/a")
-    .map(color_pct, subset=["% vs Open", "% vs Prev"])
-)
-st.dataframe(styled, use_container_width=True, hide_index=True)
+with tab_prices:
+    if len(dips):
+        st.warning(f"🔔 {len(dips)} ETF(s) dipping ≥ {DIP_THRESHOLD_PCT:.0f}% below today's open.")
+    else:
+        st.success("No ETF is dipping past the alert threshold right now.")
 
-missing = set(ETFS) - set(quotes)
-if missing:
-    st.warning("❓ No data for: " + ", ".join(missing) + " — fix the `yf` symbol in config.py.")
+    styled = (
+        df.style
+        .format({"Price ₹": "{:.2f}", "Open ₹": "{:.2f}", "Prev ₹": "{:.2f}",
+                 "% vs Open": "{:+.2f}", "% vs Prev": "{:+.2f}", "Alloc %": "{:.0f}"},
+                na_rep="n/a")
+        .map(color_pct, subset=["% vs Open", "% vs Prev"])
+    )
+    st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
-# ---- Chart + allocation --------------------------------------------------
-c1, c2 = st.columns([2, 1])
+    missing = set(ETFS) - set(quotes)
+    if missing:
+        st.caption("❓ No data for: " + ", ".join(missing) + " — fix the `yf` symbol in config.py.")
 
-with c1:
-    st.subheader("Candlestick")
+with tab_chart:
     cc1, cc2 = st.columns(2)
     ticker = cc1.selectbox("ETF", list(quotes.keys()))
     interval = cc2.selectbox("Interval", ["1m", "5m", "15m", "1h", "1d"], index=1)
@@ -102,17 +114,47 @@ with c1:
             x=ohlc.index, open=ohlc["Open"], high=ohlc["High"],
             low=ohlc["Low"], close=ohlc["Close"], name=ticker,
         ))
-        fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0),
+        fig.update_layout(template="plotly_white", height=460,
+                          margin=dict(l=0, r=0, t=10, b=0),
                           xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
 
-with c2:
-    st.subheader("Allocation")
+with tab_alloc:
     alloc_df = df[df["Alloc %"] > 0]
-    pie = px.pie(alloc_df, names="Ticker", values="Alloc %", hole=0.45)
-    pie.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0),
-                      showlegend=True)
+    pie = px.pie(alloc_df, names="Ticker", values="Alloc %", hole=0.5,
+                 template="plotly_white")
+    pie.update_traces(textposition="inside", textinfo="label+percent")
+    pie.update_layout(height=460, margin=dict(l=0, r=0, t=10, b=0))
     st.plotly_chart(pie, use_container_width=True)
 
-st.caption(f"🔔 Dip alerts pushed to ntfy topic: `{NTFY_TOPIC}` "
-           f"(handled separately by the GitHub Actions cron — works even when this page is closed).")
+with tab_help:
+    st.markdown(f"""
+#### What each column means
+| Column | Meaning |
+|---|---|
+| **Ticker** | Your INDmoney ETF symbol. |
+| **Name** | Fund name. |
+| **Alloc %** | Your target weight in the portfolio. |
+| **Freq** | How often you SIP it (Daily / Weekly / Watch). |
+| **Price ₹** | Latest traded price (most recent 1-minute bar). |
+| **Open ₹** | Today's opening price. |
+| **Prev ₹** | Yesterday's closing price. |
+| **% vs Open** | Price change since *today's open* — the **dip metric** alerts watch. Red shading = dipping ≥ {DIP_THRESHOLD_PCT:.0f}%. |
+| **% vs Prev** | Price change since *yesterday's close* — the headline day move. |
+
+#### Where the data comes from
+- **Source:** Yahoo Finance (free) via the `yfinance` library — NSE end-of-day + intraday bars.
+- **Delay:** roughly **15 minutes** behind live exchange price. Fine for SIP/dip decisions, not for active trading.
+- This dashboard caches data for **{REFRESH_SECONDS}s** and auto-refreshes only during market hours (Mon–Fri 09:15–15:30 IST).
+
+#### When a notification fires
+- A separate **GitHub Actions** job runs **every 5 minutes during market hours** (it runs in the cloud — your PC can be off).
+- It pushes a 🔔 alert to your phone (ntfy topic `{NTFY_TOPIC}`) when an ETF is **≥ {DIP_THRESHOLD_PCT:.0f}% below today's open**.
+- **Anti-spam:** you're alerted once when a dip starts, and again only if it deepens by another full 1%.
+
+#### Expected delay on an alert
+- yfinance lag (~15 min) **+** the cron gap (now ~5 min) = an alert can arrive up to roughly **20 minutes** after the actual dip.
+- The ~15 min data lag dominates — for true real-time you'd swap yfinance for a live broker API (e.g. Upstox) in `data_feed.py`.
+""")
+
+st.caption(f"🔔 Alerts go to ntfy topic `{NTFY_TOPIC}` · handled by GitHub Actions, independent of this page.")
