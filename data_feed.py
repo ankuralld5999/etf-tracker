@@ -38,31 +38,42 @@ def _fetch_one(yf_symbol: str) -> dict | None:
     fallbacks. pct_from_open is None when no valid open exists yet.
     """
     t = yf.Ticker(yf_symbol)
-    daily = t.history(period="5d", interval="1d").dropna(subset=["Close"])
+    daily = t.history(period="7d", interval="1d").dropna(subset=["Close"])
     if daily.empty:
         return None
 
-    today = daily.iloc[-1]
-    prev_close = float(daily.iloc[-2]["Close"]) if len(daily) >= 2 else float(today["Close"])
-
-    # Prefer the intraday session: first bar = true open, last bar = current price.
-    open_ = float(today["Open"]) if _ok(today["Open"]) else None
-    price = float(today["Close"]) if _ok(today["Close"]) else prev_close
+    # Intraday gives TODAY's true open + current price — the daily bar for the
+    # current session is often unsettled (NaN), so we must not rely on it.
+    intr = pd.DataFrame()
     try:
         intr = t.history(period="1d", interval="1m").dropna(subset=["Close"])
-        if not intr.empty:
-            price = float(intr["Close"].iloc[-1])
-            if _ok(intr["Open"].iloc[0]):
-                open_ = float(intr["Open"].iloc[0])
     except Exception:
         pass
 
-    pct_from_open = round((price - open_) / open_ * 100, 2) if _ok(open_) and open_ else None
+    if not intr.empty:
+        today_date = intr.index[-1].date()
+        price = float(intr["Close"].iloc[-1])
+        open_ = float(intr["Open"].iloc[0]) if _ok(intr["Open"].iloc[0]) else None
+        # Previous close = last SETTLED daily close strictly before today.
+        prior = daily[daily.index.date < today_date]
+        prev_close = float(prior["Close"].iloc[-1]) if not prior.empty else None
+        if open_ is None:  # fall back to today's daily open if intraday lacked it
+            same = daily[daily.index.date == today_date]
+            if not same.empty and _ok(same["Open"].iloc[-1]):
+                open_ = float(same["Open"].iloc[-1])
+    else:
+        # Market closed and yfinance has settled the latest daily bar.
+        last = daily.iloc[-1]
+        price = float(last["Close"])
+        open_ = float(last["Open"]) if _ok(last["Open"]) else None
+        prev_close = float(daily.iloc[-2]["Close"]) if len(daily) >= 2 else None
+
+    pct_from_open = round((price - open_) / open_ * 100, 2) if open_ else None
     pct_from_prev = round((price - prev_close) / prev_close * 100, 2) if prev_close else None
     return {
         "price": round(price, 2),
-        "open": round(open_, 2) if _ok(open_) else None,
-        "prev_close": round(prev_close, 2),
+        "open": round(open_, 2) if open_ else None,
+        "prev_close": round(prev_close, 2) if prev_close else None,
         "pct_from_open": pct_from_open,
         "pct_from_prev": pct_from_prev,
     }
