@@ -14,6 +14,7 @@ from __future__ import annotations
 import csv
 import gzip
 import io
+from urllib.parse import urlencode
 
 import requests
 
@@ -27,12 +28,13 @@ INSTRUMENTS_URL = "https://assets.upstox.com/market-quote/instruments/exchange/c
 # OAuth
 # ---------------------------------------------------------------------------
 def get_auth_url(api_key: str, redirect_uri: str) -> str:
-    return (f"{API}/login/authorization/dialog?response_type=code"
-            f"&client_id={api_key}&redirect_uri={redirect_uri}")
+    q = urlencode({"response_type": "code", "client_id": api_key,
+                   "redirect_uri": redirect_uri})
+    return f"{API}/login/authorization/dialog?{q}"
 
 
 def exchange_code(api_key: str, api_secret: str, redirect_uri: str, code: str) -> str:
-    """Exchange the one-time ?code for a daily access token."""
+    """Exchange the one-time ?code for a daily access token (POST, form-encoded)."""
     r = requests.post(
         f"{API}/login/authorization/token",
         headers={"accept": "application/json",
@@ -46,8 +48,14 @@ def exchange_code(api_key: str, api_secret: str, redirect_uri: str, code: str) -
         },
         timeout=20,
     )
-    r.raise_for_status()
-    return r.json()["access_token"]
+    body = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    if "access_token" in body:
+        return body["access_token"]
+    # Surface Upstox's real reason instead of a generic KeyError/HTTPError.
+    errs = body.get("errors") or [{}]
+    msg = errs[0].get("message") or r.text[:160]
+    code_ = errs[0].get("errorCode", "")
+    raise RuntimeError(f"{code_} {msg}".strip())
 
 
 # ---------------------------------------------------------------------------
