@@ -4,7 +4,7 @@ name: ETF dip alerts
 # Times are UTC. NSE 09:15–15:30 IST == 03:45–10:00 UTC, Mon–Fri.
 on:
   schedule:
-    - cron: "*/30 3-10 * * 1-5"   # every 30 min during market hours
+    - cron: "*/5 3-10 * * 1-5"   # every 5 min during market hours
   workflow_dispatch:               # manual "Run workflow" button
     inputs:
       force:
