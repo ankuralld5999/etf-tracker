@@ -30,8 +30,8 @@ ETFS = {
 # Notifications  (ntfy.sh — free, no account)
 # Override with the NTFY_TOPIC env var / GitHub secret in production.
 # ---------------------------------------------------------------------------
-NTFY_TOPIC = os.getenv("NTFY_TOPIC", "etf-tracker-ankur")
-NTFY_SERVER = os.getenv("NTFY_SERVER", "https://ntfy.sh")
+NTFY_TOPIC = os.getenv("NTFY_TOPIC") or "etf-tracker-ankur"
+NTFY_SERVER = os.getenv("NTFY_SERVER") or "https://ntfy.sh"
 
 # ---------------------------------------------------------------------------
 # Alert thresholds
