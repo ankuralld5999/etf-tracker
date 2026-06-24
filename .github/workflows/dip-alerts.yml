@@ -1,0 +1,51 @@
+name: ETF dip alerts
+
+# Runs unattended in GitHub's cloud — no PC required.
+# Times are UTC. NSE 09:15–15:30 IST == 03:45–10:00 UTC, Mon–Fri.
+on:
+  schedule:
+    - cron: "*/30 3-10 * * 1-5"   # every 30 min during market hours
+  workflow_dispatch:               # manual "Run workflow" button
+    inputs:
+      force:
+        description: "Run even if market is closed"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # needed to commit alert_state.json back
+
+concurrency:
+  group: dip-alerts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Check for dips and notify
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          FORCE_RUN: ${{ inputs.force == true && '1' || '0' }}
+        run: python check_alerts.py
+
+      - name: Persist alert state
+        run: |
+          if [[ -n "$(git status --porcelain alert_state.json)" ]]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add alert_state.json
+            git commit -m "chore: update alert state [skip ci]"
+            git push
+          else
+            echo "No state change."
+          fi
