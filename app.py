@@ -5,10 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from config import (
-    ETFS, REFRESH_SECONDS, MONTHLY_SIP_BUDGET, MONTHLY_DIP_BUDGET,
-    DIP_THRESHOLD_PCT, NTFY_TOPIC,
-)
+from config import ETFS, REFRESH_SECONDS, DIP_THRESHOLD_PCT, NTFY_TOPIC
 from datetime import datetime, timezone, timedelta, time as dtime
 from pathlib import Path
 
@@ -160,30 +157,47 @@ if api_key and "code" in st.query_params and not st.session_state.get("upstox_to
         st.session_state["upstox_error"] = f"Login failed: {e}"
     st.query_params.clear()
 
+# ---- Credential status (time-based: tokens die at 03:30 IST) ----
+_conn = st.session_state.get("upstox_connected_at")
+creds_expired = bool(_conn) and now_ist() >= token_expiry(_conn)
+if st.session_state.get("upstox_token") and creds_expired:
+    st.session_state.pop("upstox_token", None)      # auto-retire stale token
+creds_active = bool(st.session_state.get("upstox_token"))
+
 # ---- Sidebar: data source / Upstox connection ----
 with st.sidebar:
     st.header("Data source")
     if not api_key:
         st.caption("Add UPSTOX_API_KEY / _SECRET / _REDIRECT_URI in Streamlit "
                    "secrets to enable real-time. Until then: delayed yfinance.")
-    elif st.session_state.get("upstox_token"):
-        st.success("🟢 Upstox connected (real-time)")
-        conn = st.session_state.get("upstox_connected_at")
-        if conn:
-            exp = token_expiry(conn)
-            mins = max(0, int((exp - now_ist()).total_seconds() // 60))
-            st.caption(f"Connected {conn:%d %b %H:%M} IST")
-            st.caption(f"Token valid until {exp:%d %b %H:%M} IST · ~{mins // 60}h {mins % 60}m left")
+    elif creds_active:
+        st.success("🟢 Credentials active — real-time")
+        exp = token_expiry(_conn)
+        mins = max(0, int((exp - now_ist()).total_seconds() // 60))
+        st.caption(f"Connected {_conn:%d %b %H:%M} IST")
+        st.caption(f"Valid until {exp:%d %b %H:%M} IST · ~{mins // 60}h {mins % 60}m left")
         if st.button("Disconnect"):
             st.session_state.pop("upstox_token", None)
             st.session_state.pop("upstox_connected_at", None)
             st.rerun()
     else:
-        st.info("Delayed data (yfinance). Connect Upstox for real-time:")
+        if creds_expired:
+            st.error("🔴 Credentials inactive — token expired. Reconnect:")
+        else:
+            st.info("Delayed data (yfinance). Connect Upstox for real-time:")
         st.link_button("🔑 Connect Upstox", upstox_feed.get_auth_url(api_key, redirect_uri))
-        st.caption("Token expires daily (~03:30 IST) — reconnect each morning.")
+        st.caption("Tokens expire daily (~03:30 IST) — reconnect each morning.")
     if st.session_state.get("upstox_error"):
         st.warning(st.session_state["upstox_error"])
+
+    st.divider()
+    st.markdown(
+        "<a href='https://account.upstox.com/developer/apps' target='_blank' "
+        "style='font-family:Inter Tight,sans-serif;font-size:.82rem;color:#2D2A6E;"
+        "text-decoration:none;font-weight:600;'>⚙️ Manage Upstox app ↗</a>"
+        "<div style='font-size:.72rem;color:#6B6780;margin-top:.2rem;'>"
+        "Create / edit your app, set the redirect URI, copy API key &amp; secret.</div>",
+        unsafe_allow_html=True)
 
 # Auto-refresh only while the market is open.
 if is_market_open():
@@ -222,7 +236,22 @@ quotes, source = get_quotes()
 if not quotes:
     st.error("No market data returned. Try again in a moment, or check ticker symbols in config.py.")
     st.stop()
-st.caption(f"{status} · {refresh_note} · source: {source} · updated {now_ist():%d %b %H:%M:%S} IST")
+
+live = source.startswith("Upstox")
+src_color = GOLD if live else "#6B6780"
+src_dot = "🟢" if live else "⚪"
+st.markdown(
+    "<div style='display:flex;flex-wrap:wrap;gap:.55rem;align-items:center;"
+    "font-family:JetBrains Mono,monospace;font-size:.8rem;color:#6B6780;"
+    "margin:.1rem 0 .7rem;'>"
+    f"<span>{status}</span><span style='opacity:.35'>•</span>"
+    f"<span>{src_dot} Source: <b style='color:{src_color}'>{source}</b></span>"
+    "<span style='opacity:.35'>•</span>"
+    f"<span>Updated <b style='color:#1A1A2E'>{now_ist():%d %b %H:%M:%S}</b> IST</span>"
+    "<span style='opacity:.35'>•</span>"
+    f"<span>{refresh_note}</span>"
+    "</div>",
+    unsafe_allow_html=True)
 
 # ---- Build the table -----------------------------------------------------
 ret = get_returns()
@@ -238,16 +267,9 @@ df = pd.DataFrame(rows).sort_values("% vs Open", na_position="last")
 PCT_COLS = ["% vs Open", "1D %", "3M %", "6M %", "1Y %", "5Y %"]
 dips = df[df["% vs Open"] <= -DIP_THRESHOLD_PCT]
 
-# Allocation-weighted day move (vs previous close), skipping missing data.
-wdf = df.dropna(subset=["1D %"])
-day_move = (wdf["Alloc %"] * wdf["1D %"]).sum() / wdf["Alloc %"].sum() if not wdf.empty else 0.0
-
-# ---- Summary metrics -----------------------------------------------------
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Portfolio day move", f"{day_move:+.2f}%", help="Allocation-weighted change vs yesterday's close")
-m2.metric("ETFs dipping", f"{len(dips)}", help=f"≥ {DIP_THRESHOLD_PCT:.0f}% below today's open")
-m3.metric("Monthly SIP", f"₹{MONTHLY_SIP_BUDGET:,}")
-m4.metric("Dip budget", f"₹{MONTHLY_DIP_BUDGET:,}")
+# ---- Summary metric ------------------------------------------------------
+m1, _ = st.columns([1, 3])
+m1.metric("ETFs dipping", f"{len(dips)}", help=f"≥ {DIP_THRESHOLD_PCT:.0f}% below today's open")
 
 st.divider()
 
@@ -276,7 +298,7 @@ with tab_prices:
     else:
         st.success("No ETF is dipping past the alert threshold right now.")
 
-    fmt = {"Price ₹": "{:.2f}", "Open ₹": "{:.2f}", "Prev ₹": "{:.2f}", "Alloc %": "{:.0f}"}
+    fmt = {"Price ₹": "{:.2f}", "Open ₹": "{:.2f}", "Prev ₹": "{:.2f}", "Alloc %": "{:.0f}%"}
     fmt.update({c: "{:+.2f}" for c in PCT_COLS})
     styled = (
         df.style
