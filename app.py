@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
 
-from config import ETFS, REFRESH_SECONDS, DIP_THRESHOLD_PCT, NTFY_TOPIC
+from config import ETFS, REFRESH_SECONDS, DIP_THRESHOLD_PCT, DIP_STEP_PCT, NTFY_TOPIC
 from datetime import datetime, timezone, timedelta, time as dtime
 from pathlib import Path
 
@@ -258,18 +258,21 @@ ret = get_returns()
 rows = [{
     "Ticker": tk, "Name": q["name"], "Alloc %": q["alloc"], "Freq": q["freq"],
     "Price ₹": q["price"], "Open ₹": q["open"], "Prev ₹": q["prev_close"],
-    "% vs Open": q["pct_from_open"], "1D %": q["pct_from_prev"],
+    "1D %": q["pct_from_prev"], "% vs Open": q["pct_from_open"],
+    "vs 50-DMA %": ret.get(tk, {}).get("vs 50-DMA %"),
+    "20D DD %": ret.get(tk, {}).get("20D DD %"),
     "3M %": ret.get(tk, {}).get("3M %"), "6M %": ret.get(tk, {}).get("6M %"),
     "1Y %": ret.get(tk, {}).get("1Y %"), "5Y %": ret.get(tk, {}).get("5Y %"),
 } for tk, q in quotes.items()]
-df = pd.DataFrame(rows).sort_values("% vs Open", na_position="last")
+df = pd.DataFrame(rows).sort_values("1D %", na_position="last")
 
-PCT_COLS = ["% vs Open", "1D %", "3M %", "6M %", "1Y %", "5Y %"]
-dips = df[df["% vs Open"] <= -DIP_THRESHOLD_PCT]
+PCT_COLS = ["1D %", "% vs Open", "vs 50-DMA %", "20D DD %", "3M %", "6M %", "1Y %", "5Y %"]
+dips = df[df["1D %"] <= -DIP_THRESHOLD_PCT]
 
 # ---- Summary metric ------------------------------------------------------
 m1, _ = st.columns([1, 3])
-m1.metric("ETFs dipping", f"{len(dips)}", help=f"≥ {DIP_THRESHOLD_PCT:.0f}% below today's open")
+m1.metric("ETFs dipping", f"{len(dips)}",
+          help=f"≥ {DIP_THRESHOLD_PCT:.1f}% below yesterday's close (1D %)")
 
 st.divider()
 
@@ -279,8 +282,8 @@ tab_prices, tab_chart, tab_alloc, tab_help = st.tabs(
 )
 
 
-def color_pct(v):
-    """Palette-matched red/green for % columns."""
+def color_dip(v):
+    """Heavy highlight for the trigger column (1D %): shade cells past the threshold."""
     if pd.isna(v):
         return "color:#9A96A8"
     if v <= -DIP_THRESHOLD_PCT:
@@ -292,9 +295,20 @@ def color_pct(v):
     return ""
 
 
+def color_pct(v):
+    """Plain palette-matched red/green for the other % columns."""
+    if pd.isna(v):
+        return "color:#9A96A8"
+    if v < 0:
+        return f"color:{LOSS}"
+    if v > 0:
+        return f"color:{GAIN}"
+    return ""
+
+
 with tab_prices:
     if len(dips):
-        st.warning(f"🔔 {len(dips)} ETF(s) dipping ≥ {DIP_THRESHOLD_PCT:.0f}% below today's open.")
+        st.warning(f"🔔 {len(dips)} ETF(s) dipping ≥ {DIP_THRESHOLD_PCT:.1f}% below yesterday's close (1D %).")
     else:
         st.success("No ETF is dipping past the alert threshold right now.")
 
@@ -303,7 +317,8 @@ with tab_prices:
     styled = (
         df.style
         .format(fmt, na_rep="n/a")
-        .map(color_pct, subset=PCT_COLS)
+        .map(color_dip, subset=["1D %"])
+        .map(color_pct, subset=[c for c in PCT_COLS if c != "1D %"])
     )
     st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
 
@@ -376,11 +391,15 @@ with tab_help:
 | **Price ₹** | Latest traded price (most recent 1-minute bar). |
 | **Open ₹** | Today's opening price. |
 | **Prev ₹** | Yesterday's closing price. |
-| **% vs Open** | Price change since *today's open* — the **dip metric** alerts watch. Red shading = dipping ≥ {DIP_THRESHOLD_PCT:.0f}%. |
-| **1D %** | Today's return (vs yesterday's close). |
+| **1D %** | Today's return vs *yesterday's close* — the **dip metric** alerts watch. Red shading = dipping ≥ {DIP_THRESHOLD_PCT:.1f}%. |
+| **% vs Open** | Price change since *today's open* (intraday context only — no longer drives alerts). |
+| **vs 50-DMA %** | Price vs its **50-day moving average**. Negative = trading *below trend* — context for whether a dip is genuinely cheap. |
+| **20D DD %** | **Drawdown from the highest close in the last 20 sessions** (≤ 0; 0 = at a fresh high). Deeper = bigger pullback. |
 | **3M / 6M / 1Y / 5Y %** | **Cumulative** return over that window (not annualised), dividend- & split-adjusted. `n/a` if the ETF isn't that old. |
 
-*Returns are computed from Yahoo Finance daily history and cached for 1 hour (they move slowly).*
+*Returns, 50-DMA and 20-day drawdown are computed from Yahoo Finance daily history and cached for 1 hour (they move slowly).*
+
+> **Reading a dip:** `1D %` triggers the alert, but **vs 50-DMA %** and **20D DD %** tell you whether it's a real, trend-relative dip worth a top-up — a red `1D %` while still *above* the 50-DMA is just noise; a red `1D %` *with* a deep `20D DD %` is a genuine correction.
 
 #### Where the data comes from (hybrid)
 - **Default:** Yahoo Finance via `yfinance` — free, **~15 min delayed**. Used for the price table when Upstox isn't connected, and always for the candlestick chart.
@@ -390,8 +409,8 @@ with tab_help:
 
 #### When a notification fires
 - A separate **GitHub Actions** job runs **every 5 minutes during market hours** (it runs in the cloud — your PC can be off).
-- It pushes a 🔔 alert to your phone (ntfy topic `{NTFY_TOPIC}`) when an ETF is **≥ {DIP_THRESHOLD_PCT:.0f}% below today's open**.
-- **Anti-spam:** you're alerted once when a dip starts, and again only if it deepens by another full 1%.
+- It pushes a 🔔 alert to your phone (ntfy topic `{NTFY_TOPIC}`) when an ETF is **≥ {DIP_THRESHOLD_PCT:.1f}% below yesterday's close (1D %)**.
+- **Anti-spam:** you're alerted once at the threshold, then again only as it deepens by another {DIP_STEP_PCT:.1f}% — i.e. at **−{DIP_THRESHOLD_PCT:.1f}%, −{DIP_THRESHOLD_PCT + DIP_STEP_PCT:.1f}%, −{DIP_THRESHOLD_PCT + 2*DIP_STEP_PCT:.1f}%, −{DIP_THRESHOLD_PCT + 3*DIP_STEP_PCT:.1f}% …**
 
 #### Expected delay on an alert
 - yfinance lag (~15 min) **+** the cron gap (now ~5 min) = an alert can arrive up to roughly **20 minutes** after the actual dip.

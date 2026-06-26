@@ -37,8 +37,8 @@ NTFY_SERVER = os.getenv("NTFY_SERVER") or "https://ntfy.sh"
 # ---------------------------------------------------------------------------
 # Alert thresholds
 # ---------------------------------------------------------------------------
-DIP_THRESHOLD_PCT = 0.5   # start alerting once an ETF is this % below today's open
-DIP_STEP_PCT      = 0.5   # re-alert only after it drops another full step (anti-spam)
+DIP_THRESHOLD_PCT = 1.0   # start alerting once an ETF is this % below yesterday's close (1D %)
+DIP_STEP_PCT      = 0.5   # re-alert each further step deeper: 1.0, 1.5, 2.0, 2.5, 3.0, 3.5 ...
 
 # ---------------------------------------------------------------------------
 # Budgets (₹)  — informational, shown on the dashboard

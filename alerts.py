@@ -47,7 +47,7 @@ def send_ntfy(title: str, message: str, priority: str = "default",
 def check_dips(quotes: dict[str, dict], state: dict | None = None,
                threshold: float = DIP_THRESHOLD_PCT,
                step: float = DIP_STEP_PCT) -> tuple[list[dict], dict]:
-    """Find ETFs dipping >= threshold below today's open.
+    """Find ETFs dipping >= threshold below yesterday's close (the 1D % move).
 
     `state` carries per-day dedup info so we only re-alert when a dip
     deepens by another `step`. Returns (alerts, new_state).
@@ -58,13 +58,13 @@ def check_dips(quotes: dict[str, dict], state: dict | None = None,
 
     alerts: list[dict] = []
     for tk, q in quotes.items():
-        pct = q.get("pct_from_open")
+        pct = q.get("pct_from_prev")       # 1D %: change vs yesterday's close
         if pct is None or (isinstance(pct, float) and math.isnan(pct)):
-            continue                       # no usable open price yet
-        dip = -pct                         # positive number = below open
+            continue                       # no usable previous close yet
+        dip = -pct                         # positive number = below prev close
         if dip < threshold:
             continue
-        bucket = math.floor(dip / step) * step   # 1.0, 2.0, 3.0 ...
+        bucket = math.floor(dip / step) * step   # 1.0, 1.5, 2.0, 2.5 ...
         if bucket > state["levels"].get(tk, 0):
             state["levels"][tk] = bucket
             alerts.append({"ticker": tk, "dip": round(dip, 2), **q})
@@ -79,7 +79,7 @@ def notify_dips(alerts: list[dict]) -> bool:
     worst = alerts[0]["dip"]
 
     lines = [
-        f"{a['ticker']}  -{a['dip']:.2f}%  ₹{a['price']}  (open ₹{a['open']})"
+        f"{a['ticker']}  -{a['dip']:.2f}%  ₹{a['price']}  (prev ₹{a['prev_close']})"
         for a in alerts
     ]
     title = f"📉 {len(alerts)} ETF dip{'s' if len(alerts) > 1 else ''} — worst -{worst:.2f}%"

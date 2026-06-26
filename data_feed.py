@@ -105,16 +105,21 @@ RETURN_PERIODS = {"3M %": 91, "6M %": 182, "1Y %": 365, "5Y %": 1826}
 
 
 def fetch_returns(tickers: list[str] | None = None) -> dict[str, dict]:
-    """Cumulative % return per ticker over 3M/6M/1Y/5Y (dividend/split-adjusted).
+    """Per-ticker trend metrics from daily history (dividend/split-adjusted).
 
-    None for any window the ETF isn't old enough to cover.
+    Includes cumulative 3M/6M/1Y/5Y returns plus two "how cheap vs its own
+    trend" signals used as buy-the-dip context:
+      - "vs 50-DMA %": price vs its 50-day moving average (negative = below trend)
+      - "20D DD %":    drawdown from the highest close in the last 20 sessions
+    Any value is None when the ETF isn't old enough / lacks data.
     """
     tickers = tickers or list(ETFS.keys())
     start = (datetime.now(IST) - timedelta(days=1900)).strftime("%Y-%m-%d")  # ~5.2y
     out: dict[str, dict] = {}
     for tk in tickers:
-        labels = list(RETURN_PERIODS)
-        r = {lbl: None for lbl in labels}
+        r = {lbl: None for lbl in RETURN_PERIODS}
+        r["vs 50-DMA %"] = None
+        r["20D DD %"] = None
         try:
             close = yf.Ticker(ETFS[tk]["yf"]).history(start=start, interval="1d")["Close"].dropna()
         except Exception:
@@ -126,6 +131,14 @@ def fetch_returns(tickers: list[str] | None = None) -> dict[str, dict]:
                 if not past.empty and float(past.iloc[-1]):
                     base = float(past.iloc[-1])
                     r[lbl] = round((last - base) / base * 100, 2)
+            # Distance below the 50-day moving average (needs >= 50 sessions).
+            sma50 = close.rolling(50).mean().iloc[-1]
+            if _ok(sma50) and float(sma50):
+                r["vs 50-DMA %"] = round((last - float(sma50)) / float(sma50) * 100, 2)
+            # Drawdown from the 20-session high (<= 0; 0 = at a fresh high).
+            high20 = float(close.tail(20).max())
+            if high20:
+                r["20D DD %"] = round((last - high20) / high20 * 100, 2)
         out[tk] = r
     return out
 
