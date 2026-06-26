@@ -30,6 +30,7 @@ ETFS = {
 # Notifications  (ntfy.sh — free, no account)
 # Override with the NTFY_TOPIC env var / GitHub secret in production.
 # ---------------------------------------------------------------------------
+# `or` (not getenv default) so an empty env var / unset GitHub secret still falls back.
 NTFY_TOPIC = os.getenv("NTFY_TOPIC") or "etf-tracker-ankur"
 NTFY_SERVER = os.getenv("NTFY_SERVER") or "https://ntfy.sh"
 
