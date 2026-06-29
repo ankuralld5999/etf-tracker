@@ -1,13 +1,9 @@
 {
-  "date": "2026-06-26",
+  "date": "2026-06-29",
   "levels": {
-    "MIDCAPETF": 0.5,
-    "NIFTYBEES": 0.5,
-    "UTINEXT50": 1.5,
-    "HDFCSML250": 0.5,
-    "ICICIB22": 2.5,
+    "UTINEXT50": 1.0,
     "ITBEES": 1.0,
-    "PHARMABEES": 2.5,
+    "AUTOBEES": 1.5,
     "PSUBNKBEES": 1.0
   }
 }
