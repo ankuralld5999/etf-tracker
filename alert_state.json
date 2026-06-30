@@ -1,9 +1,6 @@
 {
-  "date": "2026-06-29",
+  "date": "2026-06-30",
   "levels": {
-    "UTINEXT50": 1.0,
-    "ITBEES": 1.0,
-    "AUTOBEES": 1.5,
-    "PSUBNKBEES": 1.0
+    "ITBEES": 2.0
   }
 }
