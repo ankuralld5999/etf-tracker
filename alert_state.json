@@ -2,7 +2,8 @@
   "date": "2026-07-14",
   "levels": {
     "HDFCSML250": 1.0,
-    "AUTOBEES": 1.0,
-    "PSUBNKBEES": 1.0
+    "AUTOBEES": 1.5,
+    "PSUBNKBEES": 1.5,
+    "BANKBEES": 1.0
   }
 }
