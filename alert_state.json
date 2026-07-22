@@ -1,7 +1,10 @@
 {
   "date": "2026-07-22",
   "levels": {
-    "PHARMABEES": 1.0,
-    "PSUBNKBEES": 1.0
+    "PHARMABEES": 1.5,
+    "PSUBNKBEES": 1.5,
+    "HDFCSML250": 1.0,
+    "BANKBEES": 1.0,
+    "ITBEES": 1.0
   }
 }
