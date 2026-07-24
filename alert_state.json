@@ -1,6 +1,8 @@
 {
-  "date": "2026-07-23",
+  "date": "2026-07-24",
   "levels": {
-    "BANKBEES": 1.0
+    "HDFCSML250": 1.0,
+    "GOLDBEES": 1.5,
+    "AUTOBEES": 1.0
   }
 }
