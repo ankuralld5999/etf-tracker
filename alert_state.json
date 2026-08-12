@@ -1,4 +1,8 @@
 {
   "date": "2026-08-12",
-  "levels": {}
+  "levels": {
+    "NIFTYBEES": 1.0,
+    "ITBEES": 1.0,
+    "FMCGIETF": 1.0
+  }
 }
