@@ -1,8 +1,8 @@
 {
-  "date": "2026-09-01",
+  "date": "2026-09-02",
   "levels": {
-    "GOLDBEES": 3.5,
-    "AUTOBEES": 1.0,
-    "PSUBNKBEES": 1.0
+    "MON100": 1.0,
+    "GOLDBEES": 2.5,
+    "AUTOBEES": 3.5
   }
 }
