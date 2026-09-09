@@ -1,10 +1,6 @@
 {
-  "date": "2026-09-08",
+  "date": "2026-09-09",
   "levels": {
-    "NIFTYBEES": 1.0,
-    "BANKBEES": 1.0,
-    "GOLDBEES": 1.0,
-    "ITBEES": 2.0,
-    "PSUBNKBEES": 1.5
+    "ITBEES": 3.0
   }
 }
