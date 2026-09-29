@@ -1,15 +1,12 @@
 {
-  "date": "2026-09-28",
+  "date": "2026-09-29",
   "levels": {
-    "MIDCAPETF": 1.0,
-    "NIFTYBEES": 1.0,
-    "UTINEXT50": 1.5,
-    "HDFCSML250": 1.0,
-    "BANKBEES": 1.5,
-    "GOLDBEES": 2.5,
+    "NIFTYBEES": 1.5,
+    "BANKBEES": 2.0,
+    "GOLDBEES": 3.0,
     "ICICIB22": 1.5,
-    "AUTOBEES": 1.0,
-    "FMCGIETF": 1.0,
+    "ITBEES": 1.0,
+    "AUTOBEES": 2.0,
     "PSUBNKBEES": 2.5
   }
 }
