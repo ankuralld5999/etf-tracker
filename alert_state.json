@@ -1,12 +1,7 @@
 {
-  "date": "2026-09-29",
+  "date": "2026-09-30",
   "levels": {
-    "NIFTYBEES": 1.5,
-    "BANKBEES": 2.0,
-    "GOLDBEES": 3.0,
-    "ICICIB22": 1.5,
     "ITBEES": 1.0,
-    "AUTOBEES": 2.0,
-    "PSUBNKBEES": 2.5
+    "PHARMABEES": 1.0
   }
 }
