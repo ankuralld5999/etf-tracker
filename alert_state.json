@@ -1,7 +1,9 @@
 {
-  "date": "2026-09-30",
+  "date": "2026-10-01",
   "levels": {
-    "ITBEES": 1.0,
-    "PHARMABEES": 1.0
+    "MIDCAPETF": 1.0,
+    "HDFCSML250": 1.0,
+    "AUTOBEES": 2.5,
+    "FMCGIETF": 1.5
   }
 }
