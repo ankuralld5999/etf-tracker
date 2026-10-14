@@ -1,6 +1,7 @@
 {
-  "date": "2026-10-07",
+  "date": "2026-10-14",
   "levels": {
-    "ITBEES": 1.0
+    "GOLDBEES": 1.0,
+    "PHARMABEES": 1.0
   }
 }
