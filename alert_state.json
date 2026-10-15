@@ -1,7 +1,8 @@
 {
-  "date": "2026-10-14",
+  "date": "2026-10-15",
   "levels": {
-    "GOLDBEES": 1.0,
-    "PHARMABEES": 1.0
+    "MON100": 3.0,
+    "HDFCSML250": 1.0,
+    "GOLDBEES": 1.0
   }
 }
