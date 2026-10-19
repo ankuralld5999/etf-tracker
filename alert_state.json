@@ -1,7 +1,10 @@
 {
-  "date": "2026-10-16",
+  "date": "2026-10-19",
   "levels": {
-    "MON100": 1.5,
-    "HDFCSML250": 1.0
+    "NIFTYBEES": 1.0,
+    "MON100": 1.0,
+    "HDFCSML250": 1.0,
+    "ITBEES": 1.5,
+    "FMCGIETF": 2.0
   }
 }
